@@ -1,0 +1,20 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ListForEach macro
+  To create resources from list of strings
+
+Resources:
+  Macro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: ListForEach
+      FunctionName: !GetAtt ListForEachMacroFunction.Arn
+  ListForEachMacroFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src
+      Handler: index.handler
+      Runtime: python3.9
+      Timeout: 5

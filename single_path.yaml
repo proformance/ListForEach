@@ -1,0 +1,120 @@
+# Run this command when it's deployed
+# http -v POST \
+# https://MY_API_GATEWAY_ID.execute-api.MY_REGION.amazonaws.com/v0/lambda
+
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: AWS API Gateway with a Lambda Integration
+
+Parameters:
+  PathName:
+    Type: String
+  ApiGatewayRestApi:
+    Type: String
+
+Resources:
+
+  ApiGatewayMethod:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGatewayRestApi
+      Description: Test Integration
+      ConnectionType: INTERNET
+      CredentialsArn: !GetAtt ApiGatewayIamRole.Arn
+      PassthroughBehavior: WHEN_NO_MATCH
+      TimeoutInMillis: 29000
+      IntegrationMethod: POST
+      IntegrationType: AWS_PROXY
+      PayloadFormatVersion: "2.0"
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations"
+
+  ApiGatewayIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ""
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "apigateway.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: LambdaAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "lambda:*"
+                Resource: !GetAtt LambdaFunction.Arn
+
+  ApiGatewayStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      DeploymentId: !Ref ApiGatewayDeployment
+      Description: Lambda API Stage v0
+      ApiId: !Ref ApiGatewayRestApi
+      StageName: !Ref PathName
+
+  ApiGatewayDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn: ApiGatewayMethod
+    Properties:
+      Description: Lambda API Deployment
+      ApiId: !Ref ApiGatewayRestApi
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          def handler(event, context):
+            response = {
+              'isBase64Encoded': False,
+              'statusCode': 200,
+              'headers': {},
+              'multiValueHeaders': {},
+              'body': 'Hello, World!'
+            }
+            return response
+      Description: AWS Lambda function
+      FunctionName: !Sub "lambda-function-${PathName}"
+      Handler: index.handler
+      MemorySize: 256
+      Role: !GetAtt LambdaIamRole.Arn
+      Runtime: python3.7
+      Timeout: 60
+
+  LambdaIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+
+  ApiGatewayResource:
+    Type: AWS::ApiGatewayV2::Route
+    DependsOn:
+      - LambdaFunction
+      - ApiGatewayMethod
+    Properties:
+      ApiId: !Ref ApiGatewayRestApi
+      RouteKey: !Sub "POST /lambda-function-${PathName}"
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref ApiGatewayMethod
+
+Outputs:
+  LambdaArn:
+    Value: !Ref LambdaFunction

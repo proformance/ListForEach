@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+#Transform: [Count, AWS::LanguageExtensions] If we want to use multiple transforms in the template
+Transform: ListForEach
+Parameters:
+  ApiGatewayName:
+    Type: String
+    Default: "testapigw"
+  PublicSubdomains:
+    Type: CommaDelimitedList
+    Description: Comma separated list of public subdomains
+    Default: "pub1,pub2"
+  PrivateSubdomains:
+    Type: CommaDelimitedList
+    Description: Comma separated list of private subdomains
+    Default: "priv1,priv2"
+  S3BucketPublic:
+    Type: String
+    Description: Public S3 bucket name
+    Default: nkjnsjkdf-public
+  S3BucketPrivate:
+    Type: String
+    Description: Private S3 bucket name
+    Default: nkjnsjkdf-private
+Resources:
+  BucketPublic:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketPublic
+  BucketPrivate:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketPrivate
+  ApiGatewayRestApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      ProtocolType: HTTP
+      Description: An API Gateway with a Lambda Integration
+      Name: !Ref ApiGatewayName
+  PathToPublicBucket:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://product-yaml-s3-bucket.s3.eu-central-1.amazonaws.com/single_path.yaml
+      Parameters:
+        PathName: "public-path-%d-%s"
+        ApiGatewayRestApi: !Ref ApiGatewayRestApi
+    ListForEach: !Ref PublicSubdomains
+    DependsOn:
+      - ApiGatewayRestApi
+  PathToPrivateBucket:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://product-yaml-s3-bucket.s3.eu-central-1.amazonaws.com/single_path.yaml
+      Parameters:
+        PathName: "private-path-%d-%s"
+        ApiGatewayRestApi: !Ref ApiGatewayRestApi
+    ListForEach: !Ref PrivateSubdomains
+    DependsOn:
+      - ApiGatewayRestApi
+Outputs:
+  PathToPrivateBucketArn:
+    Value: !Ref PathToPrivateBucket%d
+    ListForEach: !Ref PrivateSubdomains
+  PathToPrivateBucketWebsiteUrl:
+    Value: !GetAtt # This could just as well be used as in Properties in another Resource
+      - PathToPrivateBucket%d
+      - Outputs.LambdaArn
+    ListForEach: !Ref PrivateSubdomains
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Subdomain Configuration"
+        Parameters:
+          - PublicSubdomains
+          - PrivateSubdomains
+      -
+        Label:
+          default: "Bucket configuration"
+        Parameters:
+          - S3Bucket
+    ParameterLabels:
+      PublicSubdomains:
+        default: "Public subdomains"
+      PrivateSubdomains:
+        default: "Private subdomains"
+      S3Bucket:
+        default: "S3Bucket name"
